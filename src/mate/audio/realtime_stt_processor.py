@@ -200,6 +200,10 @@ class RealtimeSTTProcessor:
                         is_partial=True,
                     )
                     
+                    # Print to console
+                    print(f"\n[{label}] {text}")
+                    print("-" * 80)
+                    
                     self.logger.info("[{}] \"{}\"", label, text[:70])
                     self.events.emit("caption.frame", frame)
                     self._last_text[channel] = text
