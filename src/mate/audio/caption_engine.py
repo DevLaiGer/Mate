@@ -1,4 +1,4 @@
-"""Live caption engine built on whisper.cpp (with placeholder fallback)."""
+"""Live caption engine built on RealtimeSTT (with placeholder fallback)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from comtypes import CLSCTX_ALL
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
 from mate.audio.capture import AudioCapture
-from mate.audio.whisper_processor import WhisperProcessor
+from mate.audio.realtime_stt_processor import RealtimeSTTProcessor
 from mate.config import CaptionSettings
 from mate.core.events import EventBus
 from mate.core.state import CaptionFrame
@@ -37,8 +37,8 @@ class CaptionEngine:
         self._speaker_monitor_thread: threading.Thread | None = None
         self._speaker_monitor_stop: threading.Event | None = None
         self._speaker_endpoint: POINTER(IAudioEndpointVolume) | None = None
-        self._whisper_processor: WhisperProcessor | None = None
-        self._using_whisper = False
+        self._stt_processor: RealtimeSTTProcessor | None = None
+        self._using_stt = False
 
     def start(self) -> None:
         if self._running:
@@ -49,12 +49,12 @@ class CaptionEngine:
         self.capture.register_level_callback(self._handle_levels)
         
         if self.settings.engine == "whisper":
-            self._using_whisper = self._start_whisper_processor()
-            self.logger.debug("Whisper mode active: {}", self._using_whisper)
-            if not self._using_whisper:
+            self._using_stt = self._start_stt_processor()
+            self.logger.debug("RealtimeSTT mode active: {}", self._using_stt)
+            if not self._using_stt:
                 self.logger.error(
-                    "Whisper mode failed to start. No captions will be shown. "
-                    "Please check whisper-cli.exe and model file are available."
+                    "RealtimeSTT failed to start. No captions will be shown. "
+                    "Please install: pip install RealtimeSTT"
                 )
         elif self.settings.engine == "placeholder":
             # Only start placeholder thread if explicitly set to placeholder mode AND enabled
@@ -75,8 +75,8 @@ class CaptionEngine:
         self.logger.info("Stopping caption engine")
         self._running = False
         
-        if self._using_whisper and self._whisper_processor:
-            self._whisper_processor.stop()
+        if self._using_stt and self._stt_processor:
+            self._stt_processor.stop()
         
         self.capture.clear_level_callbacks()
         self.logger.debug(
@@ -84,25 +84,25 @@ class CaptionEngine:
             self._placeholder_thread is not None,
         )
         self._stop_speaker_monitor()
-        self._using_whisper = False
-        self._whisper_processor = None
+        self._using_stt = False
+        self._stt_processor = None
         self._placeholder_thread = None
         self._publish_device_info()
 
-    def _start_whisper_processor(self) -> bool:
-        """Start whisper processor for mic and speaker transcription."""
+    def _start_stt_processor(self) -> bool:
+        """Start RealtimeSTT processor for mic and speaker transcription."""
         try:
-            self._whisper_processor = WhisperProcessor(
+            self._stt_processor = RealtimeSTTProcessor(
                 self.settings,
                 self.capture,
                 self.events,
             )
-            success = self._whisper_processor.start()
+            success = self._stt_processor.start()
             if success:
-                self.logger.info("Whisper processor started - capturing mic and speaker audio")
+                self.logger.info("RealtimeSTT processor started - capturing mic and speaker audio")
             return success
         except Exception as exc:
-            self.logger.exception("Failed to start whisper processor: {}", exc)
+            self.logger.exception("Failed to start RealtimeSTT processor: {}", exc)
             return False
 
     def _start_placeholder_thread(self) -> None:
