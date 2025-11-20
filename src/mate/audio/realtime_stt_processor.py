@@ -134,18 +134,18 @@ class RealtimeSTTProcessor:
         """Handle incoming audio frame from capture."""
         channel = frame.channel
         
-        # Track actual sample rate
+        # Track actual sample rate (use capture settings)
         if channel not in self._actual_sample_rates:
-            self._actual_sample_rates[channel] = frame.sample_rate
+            self._actual_sample_rates[channel] = self._sample_rate
             self.logger.info(
-                "Detected {} sample rate: {}Hz",
+                "Using {} sample rate: {}Hz",
                 channel,
-                frame.sample_rate,
+                self._sample_rate,
             )
         
         # Add to buffer
         with self._buffer_locks[channel]:
-            self._audio_buffer[channel].append(frame.audio_data)
+            self._audio_buffer[channel].append(frame.samples)
 
     def _process_loop(self, channel: str, label: str) -> None:
         """Process audio loop - transcribes with faster-whisper."""
