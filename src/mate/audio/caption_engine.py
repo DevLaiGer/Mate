@@ -1,4 +1,4 @@
-"""Live caption engine built on RealtimeSTT (with placeholder fallback)."""
+"""Live caption engine built on faster-whisper (with placeholder fallback)."""
 
 from __future__ import annotations
 
@@ -50,11 +50,11 @@ class CaptionEngine:
         
         if self.settings.engine == "whisper":
             self._using_stt = self._start_stt_processor()
-            self.logger.debug("RealtimeSTT mode active: {}", self._using_stt)
+            self.logger.debug("faster-whisper mode active: {}", self._using_stt)
             if not self._using_stt:
                 self.logger.error(
-                    "RealtimeSTT failed to start. No captions will be shown. "
-                    "Please install: pip install RealtimeSTT"
+                    "faster-whisper failed to start. No captions will be shown. "
+                    "Please install: pip install faster-whisper"
                 )
         elif self.settings.engine == "placeholder":
             # Only start placeholder thread if explicitly set to placeholder mode AND enabled
@@ -90,7 +90,7 @@ class CaptionEngine:
         self._publish_device_info()
 
     def _start_stt_processor(self) -> bool:
-        """Start RealtimeSTT processor for mic and speaker transcription."""
+        """Start faster-whisper processor for mic and speaker transcription."""
         try:
             self._stt_processor = RealtimeSTTProcessor(
                 self.settings,
@@ -99,10 +99,10 @@ class CaptionEngine:
             )
             success = self._stt_processor.start()
             if success:
-                self.logger.info("RealtimeSTT processor started - capturing mic and speaker audio")
+                self.logger.info("faster-whisper processor started - capturing mic and speaker audio")
             return success
         except Exception as exc:
-            self.logger.exception("Failed to start RealtimeSTT processor: {}", exc)
+            self.logger.exception("Failed to start faster-whisper processor: {}", exc)
             return False
 
     def _start_placeholder_thread(self) -> None:
