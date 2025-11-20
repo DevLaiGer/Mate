@@ -27,3 +27,11 @@ htmlcov/
 # Logs
 logs/
 *.log
+
+# Models (large binary files)
+models/
+*.bin
+
+# Audio recordings
+recordings/
+*.wav
