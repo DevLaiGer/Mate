@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+
+# Environments
+.env
+.env.*
+.venv/
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.egg-info/
+htmlcov/
+.coverage*
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+logs/
+*.log
