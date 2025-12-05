@@ -46,37 +46,6 @@ class UISettings(BaseModel):
     always_on_top: bool = True
 
 
-class AudioSettings(BaseModel):
-    mic_device: str | None = None
-    speaker_device: str | None = None
-    sample_rate: int = 16000
-    frame_ms: int = Field(default=30, ge=10, le=120)
-    block_size: int = 2048
-
-
-class CaptionSettings(BaseModel):
-    engine: Literal["placeholder", "whisper", "remote"] = "whisper"
-    enable_speaker_detection: bool = True
-    show_placeholder_captions: bool = False  # Only show real transcriptions by default
-    mock_interval_ms: int = 1500
-    whisper_executable: Path = Field(
-        default_factory=lambda: Path("whisper.exe")
-    )
-    whisper_model_path: Path = Field(
-        default_factory=lambda: Path.cwd() / "models" / "ggml-medium-q5_0.bin"  # Quantized medium model (best balance)
-    )
-    whisper_model_path_fast: Path = Field(
-        default_factory=lambda: Path.cwd() / "models" / "ggml-tiny.bin"  # Tiny model for Layer A (fast)
-    )
-    whisper_device: str = "CABLE Output (VB-Audio Virtual Cable)"
-    whisper_language: str = "en"
-    whisper_prompt: str = ""  # Optional context prompt to guide transcription
-    save_recordings: bool = False  # Save WAV files
-    recordings_dir: Path = Field(
-        default_factory=lambda: Path.cwd() / "recordings"
-    )
-    max_recordings: int = 1000  # Maximum number of recordings to keep (0 = unlimited)
-    realtime_latency: float = 1.2  # Seconds to buffer before transcribing (lower = faster but less accurate)
 
 
 class SnippetSettings(BaseModel):
@@ -96,10 +65,16 @@ class HotkeyBinding(BaseModel):
     action: Literal[
         "toggle_overlay",
         "toggle_visibility",
+        "hide_window",
+        "show_window",
         "toggle_engine",
         "panic_hide",
         "show_web",
-        "mute_caption",
+        "mute_audio",
+        "unmute_audio",
+        "increase_opacity",
+        "decrease_opacity",
+        "toggle_view",
     ]
     payload: dict[str, Any] | None = None
 
@@ -109,16 +84,33 @@ class HotkeySettings(BaseModel):
     bindings: list[HotkeyBinding] = Field(
         default_factory=lambda: [
             HotkeyBinding(
-                name="Toggle Overlay",
-                shortcut="ctrl+shift+space",
-                action="toggle_overlay",
+                name="Hide Window",
+                shortcut="ctrl+shift+z",
+                action="hide_window",
             ),
             HotkeyBinding(
-                name="Toggle Visibility",
-                shortcut="ctrl+alt+m",
-                action="toggle_visibility",
+                name="Show Window",
+                shortcut="ctrl+shift+b",
+                action="show_window",
             ),
-            HotkeyBinding(name="Panic Hide", shortcut="ctrl+shift+backspace", action="panic_hide"),
+            HotkeyBinding(name="Panic Hide", shortcut="alt+z", action="panic_hide"),
+            HotkeyBinding(name="Mute Audio", shortcut="alt+x", action="mute_audio"),
+            HotkeyBinding(name="Unmute Audio", shortcut="alt+b", action="unmute_audio"),
+            HotkeyBinding(
+                name="Increase Opacity",
+                shortcut="ctrl+shift+up",
+                action="increase_opacity",
+            ),
+            HotkeyBinding(
+                name="Decrease Opacity",
+                shortcut="ctrl+shift+down",
+                action="decrease_opacity",
+            ),
+            HotkeyBinding(
+                name="Toggle View",
+                shortcut="ctrl+shift+f8",
+                action="toggle_view",
+            ),
         ]
     )
 
@@ -138,8 +130,6 @@ class MateSettings(BaseModel):
     app_name: str = "mate"
     paths: AppPaths = Field(default_factory=AppPaths)
     ui: UISettings = Field(default_factory=UISettings)
-    audio: AudioSettings = Field(default_factory=AudioSettings)
-    captions: CaptionSettings = Field(default_factory=CaptionSettings)
     snippets: SnippetSettings = Field(default_factory=SnippetSettings)
     hotkeys: HotkeySettings = Field(default_factory=HotkeySettings)
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
@@ -190,17 +180,6 @@ def load_settings(env_path: Path | None = None) -> MateSettings:
     if start_url := os.getenv('MATE_START_URL'):
         overrides.setdefault('web', {})['start_url'] = start_url
 
-    if engine := os.getenv('MATE_CAPTION_ENGINE'):
-        overrides.setdefault('captions', {})['engine'] = engine
-
-    if whisper_exe := os.getenv('MATE_WHISPER_EXECUTABLE'):
-        overrides.setdefault('captions', {})['whisper_executable'] = Path(whisper_exe)
-
-    if model_path := os.getenv('MATE_WHISPER_MODEL'):
-        overrides.setdefault('captions', {})['whisper_model_path'] = Path(model_path)
-    
-    if whisper_device := os.getenv('MATE_WHISPER_DEVICE'):
-        overrides.setdefault('captions', {})['whisper_device'] = whisper_device
 
     settings = MateSettings(**overrides)
     settings.paths.ensure()
