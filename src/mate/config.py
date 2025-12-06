@@ -63,13 +63,9 @@ class HotkeyBinding(BaseModel):
     name: str
     shortcut: str
     action: Literal[
-        "toggle_overlay",
-        "toggle_visibility",
         "hide_window",
         "show_window",
-        "toggle_engine",
         "panic_hide",
-        "show_web",
         "mute_audio",
         "unmute_audio",
         "increase_opacity",

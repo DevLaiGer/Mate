@@ -101,6 +101,7 @@ class ChatGPTView(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None, chatgpt_url: str = "https://www.chatgpt.com") -> None:
         super().__init__(parent)
         self._parent_window = parent
+        self._chatgpt_url = chatgpt_url  # Store URL for use in _wire_events
         self.web_view = SilentWebView(self)
         self._setup_ui(chatgpt_url)
         self._wire_events()
@@ -137,8 +138,8 @@ class ChatGPTView(QtWidgets.QWidget):
     
     def _wire_events(self) -> None:
         """Wire up event handlers."""
-        # Navigate to ChatGPT on initialization
-        self.web_view.setUrl(QtCore.QUrl("https://www.chatgpt.com"))
+        # Navigate to configured URL on initialization
+        self.web_view.setUrl(QtCore.QUrl(self._chatgpt_url))
     
     def ensure_audio_enabled(self) -> None:
         """Ensure web view audio is enabled and not muted."""
@@ -339,7 +340,7 @@ class MainWindow(QtWidgets.QWidget):
         layout.setContentsMargins(6, 4, 6, 4)
 
         self.opacity_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setRange(20, 100)  # Match config validation: [0.2, 1.0] = [20%, 100%]
         self.opacity_slider.setValue(int(self.settings.ui.opacity * 100))
         self.opacity_slider.valueChanged.connect(self._handle_opacity_change)
 
@@ -677,7 +678,17 @@ class MainWindow(QtWidgets.QWidget):
         self.status_label.setText(f"Expanded {snippet.trigger}")
 
     def _handle_opacity_change(self, value: int) -> None:
-        self.setWindowOpacity(value / 100)
+        new_opacity = value / 100
+        # Clamp to valid range [0.2, 1.0] to match settings validation
+        clamped_opacity = max(0.2, min(1.0, new_opacity))
+        self.setWindowOpacity(clamped_opacity)
+        # Update settings to persist the change
+        self.settings.ui.opacity = clamped_opacity
+        # Sync slider if value was clamped
+        if clamped_opacity != new_opacity:
+            self.opacity_slider.blockSignals(True)
+            self.opacity_slider.setValue(int(clamped_opacity * 100))
+            self.opacity_slider.blockSignals(False)
 
     @QtCore.Slot()
     def _increaseOpacitySafe(self) -> None:  # noqa: N802
@@ -688,6 +699,8 @@ class MainWindow(QtWidgets.QWidget):
         # Sync slider
         self.opacity_slider.setValue(int(new_opacity * 100))
         self.status_label.setText(f"Opacity: {int(new_opacity * 100)}%")
+        # Update settings to persist the change
+        self.settings.ui.opacity = new_opacity
 
     @QtCore.Slot()
     def _decreaseOpacitySafe(self) -> None:  # noqa: N802
@@ -698,6 +711,8 @@ class MainWindow(QtWidgets.QWidget):
         # Sync slider
         self.opacity_slider.setValue(int(new_opacity * 100))
         self.status_label.setText(f"Opacity: {int(new_opacity * 100)}%")
+        # Update settings to persist the change
+        self.settings.ui.opacity = new_opacity
 
     def _handle_theme_change(self, theme: str) -> None:
         self.settings.ui.theme = theme
@@ -848,6 +863,7 @@ class MainWindow(QtWidgets.QWidget):
         if hasattr(self, "_resize_edges"):
             self._resize_edges = None
             self._resize_start_pos = None
+            self._resize_start_geometry = None
             # Reset cursor after resizing
             self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
         super().mouseReleaseEvent(event)
@@ -883,11 +899,6 @@ class MainWindow(QtWidgets.QWidget):
 
     def eventFilter(self, obj, event) -> bool:  # noqa: N802
         """Event filter to catch wheel events from child widgets and handle cursor updates."""
-        # Disable opacity scroll in ChatGPT view
-        if self._current_view_mode == "chatgpt" and event.type() == QtCore.QEvent.Type.Wheel:
-            # Let the event pass through normally (no opacity control)
-            return super().eventFilter(obj, event)
-        
         # Handle cursor updates for child widgets
         if event.type() == QtCore.QEvent.Type.MouseMove and obj != self:
             # Convert child widget coordinates to main window coordinates
@@ -929,8 +940,8 @@ class MainWindow(QtWidgets.QWidget):
                     # Scroll up = increase opacity
                     new_opacity = min(1.0, current_opacity + step)
                 else:
-                    # Scroll down = decrease opacity (minimum 10% to keep window visible)
-                    new_opacity = max(0.1, current_opacity - step)
+                    # Scroll down = decrease opacity (minimum 20% to match settings validation)
+                    new_opacity = max(0.2, current_opacity - step)
                 
                 # Apply new opacity
                 self.setWindowOpacity(new_opacity)
@@ -948,11 +959,6 @@ class MainWindow(QtWidgets.QWidget):
 
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:  # noqa: N802
         """Handle mouse wheel events to control opacity with Ctrl+Shift."""
-        # Disable opacity scroll in ChatGPT view
-        if self._current_view_mode == "chatgpt":
-            super().wheelEvent(event)
-            return
-        
         modifiers = event.modifiers()
         # Check if Ctrl+Shift is pressed
         if modifiers & QtCore.Qt.KeyboardModifier.ControlModifier and modifiers & QtCore.Qt.KeyboardModifier.ShiftModifier:
@@ -961,13 +967,13 @@ class MainWindow(QtWidgets.QWidget):
             # Get scroll delta (positive = scroll up, negative = scroll down)
             delta = event.angleDelta().y()
             # Adjust opacity based on scroll direction (5% per scroll step)
-            step = 0.01
+            step = 0.05
             if delta > 0:
                 # Scroll up = increase opacity
                 new_opacity = min(1.0, current_opacity + step)
             else:
-                # Scroll down = decrease opacity (minimum 1% to keep window visible)
-                new_opacity = max(0.05, current_opacity - step)
+                # Scroll down = decrease opacity (minimum 20% to match settings validation)
+                new_opacity = max(0.2, current_opacity - step)
             
             # Apply new opacity
             self.setWindowOpacity(new_opacity)
@@ -1013,9 +1019,13 @@ class MainWindow(QtWidgets.QWidget):
             page.loadFinished.connect(on_page_loaded)
         
         # Update tab title when page title changes
+        # Use tab_container reference to find current index dynamically (handles index shifts when tabs are closed)
         def update_title(title: str) -> None:
             display_title = title[:30] + "..." if len(title) > 30 else title
-            self.tab_widget.setTabText(tab_index, display_title or "New Tab")
+            # Find current index of this tab container (handles index shifts when other tabs are closed)
+            current_index = self.tab_widget.indexOf(tab_container)
+            if current_index >= 0:
+                self.tab_widget.setTabText(current_index, display_title or "New Tab")
         
         if hasattr(page, "titleChanged"):
             page.titleChanged.connect(update_title)
@@ -1023,12 +1033,8 @@ class MainWindow(QtWidgets.QWidget):
         # Navigate to initial URL
         web_view.setUrl(QtCore.QUrl(initial_url))
         
-        # Ensure audio is enabled
-        QtCore.QTimer.singleShot(100, lambda: self._ensure_audio_enabled(web_view))
-        
-        # Switch to new tab
+        # Switch to new tab (this will trigger currentChanged signal which calls _on_tab_changed)
         self.tab_widget.setCurrentIndex(tab_index)
-        self._on_tab_changed(tab_index)
         
         self.logger.debug(f"Created new tab {tab_index} with URL: {initial_url}")
 
@@ -1043,6 +1049,9 @@ class MainWindow(QtWidgets.QWidget):
             tab_container.deleteLater()
             del self._tabs[index]
         
+        # Block signals during tab removal to prevent race condition
+        # where currentChanged signal fires before _tabs dictionary is rebuilt
+        self.tab_widget.blockSignals(True)
         self.tab_widget.removeTab(index)
         
         # Update tab indices in _tabs dict
@@ -1052,6 +1061,14 @@ class MainWindow(QtWidgets.QWidget):
             if isinstance(widget, TabContainer):
                 new_tabs[i] = widget
         self._tabs = new_tabs
+        
+        # Unblock signals after state is updated
+        self.tab_widget.blockSignals(False)
+        
+        # Manually trigger tab change handler for the new current tab if needed
+        current_index = self.tab_widget.currentIndex()
+        if current_index >= 0:
+            self._on_tab_changed(current_index)
         
         self.logger.debug(f"Closed tab {index}")
 
@@ -1166,8 +1183,12 @@ class MainWindow(QtWidgets.QWidget):
         
         # Unmute ChatGPT view
         if self._chatgpt_view:
-            self._chatgpt_view.ensure_audio_enabled()
-            unmuted_count += 1
+            web_view = self._chatgpt_view.web_view
+            if web_view:
+                page = web_view.page()
+                if page:
+                    self._chatgpt_view.ensure_audio_enabled()
+                    unmuted_count += 1
         
         # Unmute all browser tabs
         for tab_container in self._tabs.values():

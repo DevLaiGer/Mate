@@ -114,6 +114,7 @@ def parse_hotkey(shortcut: str) -> ParsedHotkey:
         "ctrl+shift+z" -> ParsedHotkey(MOD_CONTROL | MOD_SHIFT, VK_Z)
         "alt+x" -> ParsedHotkey(MOD_ALT, VK_X)
         "ctrl+shift+up" -> ParsedHotkey(MOD_CONTROL | MOD_SHIFT, VK_UP)
+        "ctrl+page up" -> ParsedHotkey(MOD_CONTROL, VK_PAGE_UP)
 
     Args:
         shortcut: Keyboard library format string (e.g., "ctrl+shift+z")
@@ -127,6 +128,31 @@ def parse_hotkey(shortcut: str) -> ParsedHotkey:
     parts = [p.strip().lower() for p in shortcut.split("+")]
     if not parts:
         raise ValueError(f"Empty shortcut: {shortcut}")
+
+    # Combine consecutive parts that form multi-word keys (e.g., "page up", "page down")
+    # Check all multi-word keys in VK_CODES and combine matching consecutive parts
+    merged_parts = []
+    i = 0
+    while i < len(parts):
+        # Try to match multi-word keys by combining consecutive parts
+        matched = False
+        # Check all possible combinations from longest to shortest
+        for key in VK_CODES.keys():
+            if " " in key:  # Only check multi-word keys
+                key_words = key.split()
+                # Check if current and next parts match this multi-word key
+                if i + len(key_words) <= len(parts):
+                    combined = " ".join(parts[i:i + len(key_words)])
+                    if combined == key.lower():
+                        merged_parts.append(key.lower())
+                        i += len(key_words)
+                        matched = True
+                        break
+        if not matched:
+            merged_parts.append(parts[i])
+            i += 1
+    
+    parts = merged_parts
 
     modifiers = MOD_NONE
     vk_code: int | None = None

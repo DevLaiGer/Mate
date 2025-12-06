@@ -1,4 +1,4 @@
-﻿"""mate GUI entrypoint."""
+"""mate GUI entrypoint."""
 
 from __future__ import annotations
 
